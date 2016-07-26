@@ -633,7 +633,7 @@ static void ngx_mrb_state_clean(ngx_http_request_t *r, ngx_mrb_state_t *state)
 static void ngx_mrb_code_clean(ngx_http_request_t *r, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
 {
   // mrb_irep_decref(state->mrb, code->proc->body.irep);
-  mrbc_context_free(state->mrb, code->ctx);
+  // mrbc_context_free(state->mrb, code->ctx);
 }
 
 ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
@@ -815,6 +815,7 @@ static ngx_int_t ngx_mrb_gencode_state(ngx_mrb_state_t *state, ngx_mrb_code_t *c
   code->ctx = mrbc_context_new(state->mrb);
   mrbc_filename(state->mrb, code->ctx, (char *)code->code.file);
   p = mrb_parse_file(state->mrb, mrb_file, code->ctx);
+  mrbc_context_free(state->mrb, code->ctx);
   fclose(mrb_file);
   if (p == NULL) {
     return NGX_ERROR;
@@ -915,6 +916,7 @@ static ngx_int_t ngx_http_mruby_shared_state_compile(ngx_conf_t *cf, ngx_mrb_sta
     mrbc_filename(state->mrb, code->ctx, "INLINE CODE");
     p = mrb_parse_string(state->mrb, (char *)code->code.string, code->ctx);
   }
+  mrbc_context_free(state->mrb, code->ctx);
 
   if (p == NULL || (0 < p->nerr)) {
     return NGX_ERROR;

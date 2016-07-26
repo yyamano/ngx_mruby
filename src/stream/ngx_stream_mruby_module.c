@@ -381,6 +381,7 @@ static ngx_int_t ngx_stream_mruby_shared_state_compile(ngx_conf_t *cf, mrb_state
     mrbc_filename(mrb, code->ctx, "INLINE CODE");
     p = mrb_parse_string(mrb, (char *)code->code.string, code->ctx);
   }
+  mrbc_context_free(mrb, code->ctx);
 
   if (p == NULL || (0 < p->nerr)) {
     return NGX_ERROR;
