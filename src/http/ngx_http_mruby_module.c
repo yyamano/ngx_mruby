@@ -68,6 +68,7 @@ static ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mr
       if (code == NGX_CONF_UNSET_PTR) {                                                                                \
         return NGX_DECLINED;                                                                                           \
       }                                                                                                                \
+      mrbc_context_free(state->mrb, code->ctx);                                                                        \
       if (reinit(state, code) == NGX_ERROR) {                                                                          \
         return NGX_ERROR;                                                                                              \
       }                                                                                                                \
@@ -633,7 +634,7 @@ static void ngx_mrb_state_clean(ngx_http_request_t *r, ngx_mrb_state_t *state)
 static void ngx_mrb_code_clean(ngx_http_request_t *r, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
 {
   // mrb_irep_decref(state->mrb, code->proc->body.irep);
-  // mrbc_context_free(state->mrb, code->ctx);
+  mrbc_context_free(state->mrb, code->ctx);
 }
 
 ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
@@ -641,6 +642,7 @@ ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_
   int ai = mrb_gc_arena_save(state->mrb);
   ngx_log_error(NGX_LOG_INFO, cycle->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
+  mrbc_context_free(state->mrb, code->ctx);
   if (state->mrb->exc) {
     ngx_mrb_raise_cycle_error(state->mrb, mrb_obj_value(state->mrb->exc), cycle);
     mrb_gc_arena_restore(state->mrb, ai);
@@ -656,6 +658,7 @@ ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mrb_code_
   int ai = mrb_gc_arena_save(state->mrb);
   ngx_log_error(NGX_LOG_INFO, cf->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
+  mrbc_context_free(state->mrb, code->ctx);
   if (state->mrb->exc) {
     ngx_mrb_raise_conf_error(state->mrb, mrb_obj_value(state->mrb->exc), cf);
     mrb_gc_arena_restore(state->mrb, ai);
@@ -815,7 +818,6 @@ static ngx_int_t ngx_mrb_gencode_state(ngx_mrb_state_t *state, ngx_mrb_code_t *c
   code->ctx = mrbc_context_new(state->mrb);
   mrbc_filename(state->mrb, code->ctx, (char *)code->code.file);
   p = mrb_parse_file(state->mrb, mrb_file, code->ctx);
-  mrbc_context_free(state->mrb, code->ctx);
   fclose(mrb_file);
   if (p == NULL) {
     return NGX_ERROR;
@@ -916,7 +918,6 @@ static ngx_int_t ngx_http_mruby_shared_state_compile(ngx_conf_t *cf, ngx_mrb_sta
     mrbc_filename(state->mrb, code->ctx, "INLINE CODE");
     p = mrb_parse_string(state->mrb, (char *)code->code.string, code->ctx);
   }
-  mrbc_context_free(state->mrb, code->ctx);
 
   if (p == NULL || (0 < p->nerr)) {
     return NGX_ERROR;
