@@ -68,7 +68,8 @@ static ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mr
       if (code == NGX_CONF_UNSET_PTR) {                                                                                \
         return NGX_DECLINED;                                                                                           \
       }                                                                                                                \
-      mrbc_context_free(state->mrb, code->ctx);                                                                        \
+      if (code->ctx) mrbc_context_free(state->mrb, code->ctx);                                                         \
+      code->ctx = NULL;                                                                                                \
       if (reinit(state, code) == NGX_ERROR) {                                                                          \
         return NGX_ERROR;                                                                                              \
       }                                                                                                                \
@@ -635,6 +636,7 @@ static void ngx_mrb_code_clean(ngx_http_request_t *r, ngx_mrb_state_t *state, ng
 {
   // mrb_irep_decref(state->mrb, code->proc->body.irep);
   mrbc_context_free(state->mrb, code->ctx);
+  code->ctx = NULL;
 }
 
 ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
@@ -643,6 +645,7 @@ ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_
   ngx_log_error(NGX_LOG_INFO, cycle->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
   mrbc_context_free(state->mrb, code->ctx);
+  code->ctx = NULL;
   if (state->mrb->exc) {
     ngx_mrb_raise_cycle_error(state->mrb, mrb_obj_value(state->mrb->exc), cycle);
     mrb_gc_arena_restore(state->mrb, ai);
@@ -659,6 +662,7 @@ ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mrb_code_
   ngx_log_error(NGX_LOG_INFO, cf->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
   mrbc_context_free(state->mrb, code->ctx);
+  code->ctx = NULL;
   if (state->mrb->exc) {
     ngx_mrb_raise_conf_error(state->mrb, mrb_obj_value(state->mrb->exc), cf);
     mrb_gc_arena_restore(state->mrb, ai);
