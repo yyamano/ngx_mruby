@@ -68,8 +68,6 @@ static ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mr
       if (code == NGX_CONF_UNSET_PTR) {                                                                                \
         return NGX_DECLINED;                                                                                           \
       }                                                                                                                \
-      if (code->ctx) mrbc_context_free(state->mrb, code->ctx);                                                         \
-      code->ctx = NULL;                                                                                                \
       if (reinit(state, code) == NGX_ERROR) {                                                                          \
         return NGX_ERROR;                                                                                              \
       }                                                                                                                \
@@ -717,6 +715,9 @@ ngx_int_t ngx_mrb_run(ngx_http_request_t *r, ngx_mrb_state_t *state, ngx_mrb_cod
       result_len = RSTRING_LEN(mrb_result);
       result->data = ngx_palloc(r->pool, result_len);
       if (result->data == NULL) {
+/*
+        ngx_mrb_code_clean(r, state, code);
+*/
         return NGX_ERROR;
       }
       ngx_memcpy(result->data, (u_char *)mrb_str_to_cstr(state->mrb, mrb_result), result_len);
@@ -724,6 +725,9 @@ ngx_int_t ngx_mrb_run(ngx_http_request_t *r, ngx_mrb_state_t *state, ngx_mrb_cod
       ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "%s INFO %s:%d: mrb_run info: return value=(%s)", MODULE_NAME,
                     __func__, __LINE__, mrb_str_to_cstr(state->mrb, mrb_result));
       mrb_gc_arena_restore(state->mrb, exc_ai);
+/*
+      ngx_mrb_code_clean(r, state, code);
+*/
       return NGX_OK;
     }
   }
@@ -819,6 +823,10 @@ static ngx_int_t ngx_mrb_gencode_state(ngx_mrb_state_t *state, ngx_mrb_code_t *c
   }
 
   ai = mrb_gc_arena_save(state->mrb);
+  if (code->ctx) {
+    mrbc_context_free(state->mrb, code->ctx);
+    code->ctx = NULL;
+  }
   code->ctx = mrbc_context_new(state->mrb);
   mrbc_filename(state->mrb, code->ctx, (char *)code->code.file);
   p = mrb_parse_file(state->mrb, mrb_file, code->ctx);
@@ -2352,11 +2360,18 @@ static int ngx_http_mruby_ssl_cert_handler(ngx_ssl_conn_t *ssl_conn, void *data)
       ngx_log_error(NGX_LOG_ERR, c->log, 0,
                     MODULE_NAME " : mrb_run failed: return 500 HTTP status code to client: error: %s", err_out);
     }
+    /* 
+    mrbc_context_free(mrb, mscf->ssl_handshake_code->ctx);
+    mscf->ssl_handshake_code->ctx = NULL;
+    */
     ngx_mrb_state_clean(NULL, mscf->state);
     mrb_gc_arena_restore(mrb, ai);
     return 0;
   }
-
+  /*
+  mrbc_context_free(mrb, mscf->ssl_handshake_code->ctx);
+  mscf->ssl_handshake_code->ctx = NULL;
+  */
   ngx_mrb_state_clean(NULL, mscf->state);
   mrb_gc_arena_restore(mrb, ai);
 
