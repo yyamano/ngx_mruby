@@ -51,15 +51,10 @@ typedef struct {
 
 } ngx_stream_mruby_srv_conf_t;
 
-#define NGX_MRUBY_MRBC_CONTEXT_FREE(mrb, ctx)                                                                          \
-  if (mrb && ctx) {                                                                                                    \
-    mrbc_context_free(mrb, ctx);                                                                                       \
-    ctx = NULL;                                                                                                        \
-  }
-
-#define NGX_MRUBY_CODE_FREE(mrb, code)                                                                                 \
-  if (code != NGX_CONF_UNSET_PTR) {                                                                                    \
-    NGX_MRUBY_MRBC_CONTEXT_FREE(mrb, (code)->ctx);                                                                     \
+#define NGX_MRUBY_CODE_MRBC_CONTEXT_FREE(mrb, code)                                                                    \
+  if (code != NGX_CONF_UNSET_PTR && mrb && (code)->ctx) {                                                              \
+    mrbc_context_free(mrb, (code)->ctx);                                                                               \
+    (code)->ctx = NULL;                                                                                                \
   }
 
 /* stream session mruby handler */
@@ -182,9 +177,9 @@ static void ngx_stream_mruby_cleanup(void *data)
 {
   ngx_stream_mruby_main_conf_t *mmcf = data;
 
-  NGX_MRUBY_CODE_FREE(mmcf->ctx->mrb, mmcf->init_code);
-  NGX_MRUBY_CODE_FREE(mmcf->ctx->mrb, mmcf->init_worker_code);
-  NGX_MRUBY_CODE_FREE(mmcf->ctx->mrb, mmcf->exit_worker_code);
+  NGX_MRUBY_CODE_MRBC_CONTEXT_FREE(mmcf->ctx->mrb, mmcf->init_code);
+  NGX_MRUBY_CODE_MRBC_CONTEXT_FREE(mmcf->ctx->mrb, mmcf->init_worker_code);
+  NGX_MRUBY_CODE_MRBC_CONTEXT_FREE(mmcf->ctx->mrb, mmcf->exit_worker_code);
 
   mrb_close(mmcf->ctx->mrb);
 }
@@ -243,7 +238,7 @@ static void ngx_stream_mruby_srv_conf_cleanup(void *data)
 {
   ngx_stream_mruby_srv_conf_t *mscf = data;
 
-  NGX_MRUBY_CODE_FREE(mscf->ctx->mrb, mscf->code);
+  NGX_MRUBY_CODE_MRBC_CONTEXT_FREE(mscf->ctx->mrb, mscf->code);
 }
 
 static void *ngx_stream_mruby_create_srv_conf(ngx_conf_t *cf)
