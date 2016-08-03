@@ -31,6 +31,12 @@
     prev_code = conf_code;                                                                                             \
   }
 
+#define MRBC_CONTEXT_FREE(mrb, ctx)                                                                                    \
+  if (ctx) {                                                                                                           \
+    mrbc_context_free(mrb, ctx);                                                                                       \
+    ctx = NULL;                                                                                                        \
+  }
+
 // set conf
 static void *ngx_http_mruby_create_srv_conf(ngx_conf_t *cf);
 static char *ngx_http_mruby_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child);
@@ -310,17 +316,14 @@ extern ngx_http_request_t *ngx_mruby_request;
 static void ngx_http_mruby_cleanup(void *data)
 {
   ngx_http_mruby_main_conf_t *mmcf = data;
-  if (mmcf->init_code != NGX_CONF_UNSET_PTR && mmcf->init_code->ctx) {
-    mrbc_context_free(mmcf->state->mrb, mmcf->init_code->ctx);
-    mmcf->init_code->ctx = NULL;
+  if (mmcf->init_code != NGX_CONF_UNSET_PTR) {
+    MRBC_CONTEXT_FREE(mmcf->state->mrb, mmcf->init_code->ctx);
   }
-  if (mmcf->init_worker_code != NGX_CONF_UNSET_PTR && mmcf->init_worker_code->ctx) {
-    mrbc_context_free(mmcf->state->mrb, mmcf->init_worker_code->ctx);
-    mmcf->init_worker_code->ctx = NULL;
+  if (mmcf->init_worker_code != NGX_CONF_UNSET_PTR) {
+    MRBC_CONTEXT_FREE(mmcf->state->mrb, mmcf->init_worker_code->ctx);
   }
-  if (mmcf->exit_worker_code != NGX_CONF_UNSET_PTR && mmcf->exit_worker_code->ctx) {
-    mrbc_context_free(mmcf->state->mrb, mmcf->exit_worker_code->ctx);
-    mmcf->exit_worker_code->ctx = NULL;
+  if (mmcf->exit_worker_code != NGX_CONF_UNSET_PTR) {
+    MRBC_CONTEXT_FREE(mmcf->state->mrb, mmcf->exit_worker_code->ctx);
   }
   mrb_close(mmcf->state->mrb);
 }
@@ -644,8 +647,7 @@ static void ngx_mrb_state_clean(ngx_http_request_t *r, ngx_mrb_state_t *state)
 static void ngx_mrb_code_clean(ngx_http_request_t *r, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
 {
   // mrb_irep_decref(state->mrb, code->proc->body.irep);
-  mrbc_context_free(state->mrb, code->ctx);
-  code->ctx = NULL;
+  MRBC_CONTEXT_FREE(state->mrb, code->ctx);
 }
 
 ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_code_t *code)
@@ -653,8 +655,7 @@ ngx_int_t ngx_mrb_run_cycle(ngx_cycle_t *cycle, ngx_mrb_state_t *state, ngx_mrb_
   int ai = mrb_gc_arena_save(state->mrb);
   ngx_log_error(NGX_LOG_INFO, cycle->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
-  mrbc_context_free(state->mrb, code->ctx);
-  code->ctx = NULL;
+  MRBC_CONTEXT_FREE(state->mrb, code->ctx);
   if (state->mrb->exc) {
     ngx_mrb_raise_cycle_error(state->mrb, mrb_obj_value(state->mrb->exc), cycle);
     mrb_gc_arena_restore(state->mrb, ai);
@@ -670,8 +671,7 @@ ngx_int_t ngx_mrb_run_conf(ngx_conf_t *cf, ngx_mrb_state_t *state, ngx_mrb_code_
   int ai = mrb_gc_arena_save(state->mrb);
   ngx_log_error(NGX_LOG_INFO, cf->log, 0, "%s INFO %s:%d: mrb_run", MODULE_NAME, __func__, __LINE__);
   mrb_run(state->mrb, code->proc, mrb_top_self(state->mrb));
-  mrbc_context_free(state->mrb, code->ctx);
-  code->ctx = NULL;
+  MRBC_CONTEXT_FREE(state->mrb, code->ctx);
   if (state->mrb->exc) {
     ngx_mrb_raise_conf_error(state->mrb, mrb_obj_value(state->mrb->exc), cf);
     mrb_gc_arena_restore(state->mrb, ai);
@@ -834,10 +834,7 @@ static ngx_int_t ngx_mrb_gencode_state(ngx_mrb_state_t *state, ngx_mrb_code_t *c
   }
 
   ai = mrb_gc_arena_save(state->mrb);
-  if (code->ctx) {
-    mrbc_context_free(state->mrb, code->ctx);
-    code->ctx = NULL;
-  }
+  MRBC_CONTEXT_FREE(state->mrb, code->ctx);
   code->ctx = mrbc_context_new(state->mrb);
   mrbc_filename(state->mrb, code->ctx, (char *)code->code.file);
   p = mrb_parse_file(state->mrb, mrb_file, code->ctx);
@@ -932,19 +929,13 @@ static ngx_int_t ngx_http_mruby_shared_state_compile(ngx_conf_t *cf, ngx_mrb_sta
     if ((mrb_file = fopen((char *)code->code.file, "r")) == NULL) {
       return NGX_ERROR;
     }
-    if (code->ctx) {
-      mrbc_context_free(state->mrb, code->ctx);
-      code->ctx = NULL;
-    }
+    MRBC_CONTEXT_FREE(state->mrb, code->ctx);
     code->ctx = mrbc_context_new(state->mrb);
     mrbc_filename(state->mrb, code->ctx, (char *)code->code.file);
     p = mrb_parse_file(state->mrb, mrb_file, code->ctx);
     fclose(mrb_file);
   } else {
-    if (code->ctx) {
-      mrbc_context_free(state->mrb, code->ctx);
-      code->ctx = NULL;
-    }
+    MRBC_CONTEXT_FREE(state->mrb, code->ctx);
     code->ctx = mrbc_context_new(state->mrb);
     mrbc_filename(state->mrb, code->ctx, "INLINE CODE");
     p = mrb_parse_string(state->mrb, (char *)code->code.string, code->ctx);
@@ -2379,18 +2370,12 @@ static int ngx_http_mruby_ssl_cert_handler(ngx_ssl_conn_t *ssl_conn, void *data)
       ngx_log_error(NGX_LOG_ERR, c->log, 0,
                     MODULE_NAME " : mrb_run failed: return 500 HTTP status code to client: error: %s", err_out);
     }
-    if (mscf->ssl_handshake_code->ctx) {
-      mrbc_context_free(mrb, mscf->ssl_handshake_code->ctx);
-      mscf->ssl_handshake_code->ctx = NULL;
-    }
+    MRBC_CONTEXT_FREE(mrb, mscf->ssl_handshake_code->ctx);
     ngx_mrb_state_clean(NULL, mscf->state);
     mrb_gc_arena_restore(mrb, ai);
     return 0;
   }
-  if (mscf->ssl_handshake_code->ctx) {
-    mrbc_context_free(mrb, mscf->ssl_handshake_code->ctx);
-    mscf->ssl_handshake_code->ctx = NULL;
-  }
+  MRBC_CONTEXT_FREE(mrb, mscf->ssl_handshake_code->ctx);
   ngx_mrb_state_clean(NULL, mscf->state);
   mrb_gc_arena_restore(mrb, ai);
 
