@@ -503,6 +503,9 @@ static void *ngx_http_mruby_create_loc_conf(ngx_conf_t *cf)
   conf->cached = NGX_CONF_UNSET;
   conf->add_handler = NGX_CONF_UNSET;
 
+  conf->header_filter_handler = NGX_CONF_UNSET_PTR;
+  conf->body_filter_handler = NGX_CONF_UNSET_PTR;
+
   cln->handler = ngx_http_mruby_loc_conf_cleanup;
   cln->data = conf;
 
@@ -535,6 +538,9 @@ static char *ngx_http_mruby_merge_loc_conf(ngx_conf_t *cf, void *parent, void *c
 
   ngx_conf_merge_value(conf->cached, prev->cached, 0);
   ngx_conf_merge_value(conf->add_handler, prev->add_handler, 0);
+
+  ngx_conf_merge_ptr_value(conf->header_filter_handler, prev->header_filter_handler, NGX_CONF_UNSET_PTR);
+  ngx_conf_merge_ptr_value(conf->body_filter_handler, prev->body_filter_handler, NGX_CONF_UNSET_PTR);
 
   return NGX_CONF_OK;
 }
@@ -2148,7 +2154,7 @@ static ngx_int_t ngx_http_mruby_header_filter(ngx_http_request_t *r)
 
   mlcf = ngx_http_get_module_loc_conf(r, ngx_http_mruby_module);
 
-  if (mlcf->header_filter_handler == NULL && mlcf->body_filter_handler == NULL) {
+  if (mlcf->header_filter_handler == NGX_CONF_UNSET_PTR && mlcf->body_filter_handler == NGX_CONF_UNSET_PTR) {
     return ngx_http_next_header_filter(r);
   } else {
     r->filter_need_in_memory = 1;
@@ -2175,7 +2181,7 @@ static ngx_int_t ngx_http_mruby_header_filter(ngx_http_request_t *r)
   cln->handler = ngx_http_mruby_filter_cleanup;
   cln->data = ctx;
 
-  if (mlcf->header_filter_handler != NULL) {
+  if (mlcf->header_filter_handler != NGX_CONF_UNSET_PTR) {
     rc = mlcf->header_filter_handler(r);
     if (rc != NGX_OK) {
       return NGX_ERROR;
@@ -2195,13 +2201,13 @@ static ngx_int_t ngx_http_mruby_body_filter(ngx_http_request_t *r, ngx_chain_t *
   ngx_int_t rc;
 
   mlcf = ngx_http_get_module_loc_conf(r, ngx_http_mruby_module);
-  if (mlcf->body_filter_handler == NULL || r->headers_out.content_length_n < 0) {
+  if (mlcf->body_filter_handler == NGX_CONF_UNSET_PTR || r->headers_out.content_length_n < 0) {
     if (r->headers_out.content_length_n < 0) {
       ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
                     "body filter don't support chunked response, go to next filter %s:%d", __FUNCTION__, __LINE__);
     }
 
-    if (mlcf->body_filter_handler != NULL) {
+    if (mlcf->body_filter_handler != NGX_CONF_UNSET_PTR) {
       rc = ngx_http_next_header_filter(r);
       if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
         return NGX_ERROR;

@@ -434,11 +434,14 @@ end
 t.assert('ngx_mruby - access_handler in server scope', 'location /access_handler_in_server_scope') do
   res = HttpRequest.new.get base(58084) + '/access_handler_in_server_scope/'
   t.assert_equal 403, res["code"]
+  t.assert_equal "processed by header_filetr", res["X-New-Header"]
+  t.assert_equal "OK", res["body"]
 end
 
 t.assert('ngx_mruby - override access_handler in server scope', 'location /override_access_handler_in_server_scope') do
   res = HttpRequest.new.get base(58084) + '/override_access_handler_in_server_scope/'
   t.assert_equal 200, res["code"]
+  t.assert_equal "processed by header_filetr", res["X-New-Header"]
   t.assert_equal "OK", res["body"]
 end
 
