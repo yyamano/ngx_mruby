@@ -226,6 +226,25 @@ t.assert('ngx_mruby - update built-in response header in http context', 'locatio
   t.assert_equal "global_ngx_mruby", res["server"]
 end
 
+t.assert('ngx_mruby - content_handler with output_header_filter', 'location /content_handler_with_header_filter') do
+  res = HttpRequest.new.get base + '/content_handler_with_header_filter'
+  t.assert_equal "OK", res["body"]
+  t.assert_equal "header_filter", res["x-new-header"]
+end
+
+t.assert('ngx_mruby - content_handler with output_body_filter', 'location /content_handler_with_body_filter') do
+  res = HttpRequest.new.get base + '/content_handler_with_header_filter'
+  puts "XXXXXXXXXXXXXX 2 #{res.inspect} XXXX"
+  t.assert_equal "OK(processed by body_filter)", res["body"]
+end
+
+#t.assert('ngx_mruby - content_handler with output filters', 'location /content_handler_with_header_and_body_filter') do
+#  res = HttpRequest.new.get base + '/content_handler_with_header_and_body_filter'
+#  puts "XXXXXXXXXXXXXX 3 #{res.inspect} XXXX"
+#  t.assert_equal "OK(processed by body_filter)", res["body"]
+#  t.assert_equal " header_filter", res["x-new-header"]
+#end
+
 t.assert('ngx_mruby - sub_request? check', 'location /sub_request_check') do
   res = HttpRequest.new.get base + '/sub_request_check'
   t.assert_equal "false", res["body"]
