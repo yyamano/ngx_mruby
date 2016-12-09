@@ -18,7 +18,7 @@ if [ `uname -s` = "NetBSD" ]; then
     PS_C="pgrep -l"
 else
     NPROCESSORS_ONLN="_NPROCESSORS_ONLN"
-    NGINX_DEFUALT_OPT='--with-debug --with-http_stub_status_module --with-http_ssl_module --with-cc-opt=-g\ -O0'
+    NGINX_DEFUALT_OPT='--with-debug --with-http_stub_status_module --with-http_ssl_module --with-cc-opt=-g\ -O0\ -fsanitize=address\ -Wl,--no-undefined --with-ld-opt=-fsanitize=address'
     MAKE=make
     KILLALL=killall
     PS_C="ps -C"
