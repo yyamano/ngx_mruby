@@ -612,6 +612,11 @@ t.assert('ngx_mruby - Nginx.set_status= alias Nginx.return', 'location /alias_re
   t.assert_equal 204, res["code"]
 end
 
+t.assert('ngx_mruby - BUG: request_body issue 282', 'location /issue-282') do
+  res = `./test/t/issue-282-test.rb`.split("\r\n\r\n")[1]
+  t.assert_equal %({\"hello\": \"ngx_mruby\"}\n), res
+end
+
 if nginx_features.is_stream_supported?
 
   base1 = "http://127.0.0.1:12345"
