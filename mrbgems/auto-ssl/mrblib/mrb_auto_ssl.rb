@@ -53,8 +53,10 @@ class Nginx
                     "--accept-terms",
                     "--config #{@dehydrated[:conf]}",
                   ].join(" ")
-        res = `#{command}`
-        Nginx::SSL.log Nginx::LOG_INFO, res
+        res = `#{command} 2>&1`
+        unless $?.exitstatus == 0
+          Nginx::SSL.log Nginx::LOG_INFO, "Failed to accept terms. status=#{$?.exitstatus}: #{res}"
+        end
       end
 
       def auto_cert_deploy
@@ -69,9 +71,10 @@ class Nginx
                   ].join(" ")
 
         Nginx::SSL.log Nginx::LOG_INFO, "run acme command: #{command}"
-        res = `HOOK_SECRET=#{@dehydrated[:secret_token]} #{command}`
-        Nginx::SSL.log Nginx::LOG_INFO, res
-
+        res = `HOOK_SECRET=#{@dehydrated[:secret_token]} #{command}  2>&1`
+        unless $?.exitstatus == 0
+          Nginx::SSL.log Nginx::LOG_INFO, "Failed to deploy cert. status=#{$?.exitstatus}: #{res}"
+        end
         if /#{license_info_str}/ === res
           auto_accept_terms
           auto_cert_deploy
