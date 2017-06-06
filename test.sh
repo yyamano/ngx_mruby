@@ -12,13 +12,13 @@ set -e
 # OS specific configuration
 if [ `uname -s` = "NetBSD" ]; then
     NPROCESSORS_ONLN="NPROCESSORS_ONLN"
-    NGINX_DEFUALT_OPT='--with-debug --with-http_stub_status_module --with-http_ssl_module --with-ld-opt=-L/usr/pkg/lib\ -Wl,-R/usr/pkg/lib --with-cc-opt=-g\ -O0'
+    NGINX_DEFUALT_OPT='--with-debug --with-http_auth_request_module --with-http_stub_status_module --with-http_ssl_module --with-ld-opt=-L/usr/pkg/lib\ -Wl,-R/usr/pkg/lib --with-cc-opt=-g\ -O0'
     MAKE=gmake
     KILLALL=pkill
     PS_C="pgrep -l"
 else
     NPROCESSORS_ONLN="_NPROCESSORS_ONLN"
-    NGINX_DEFUALT_OPT='--with-debug --with-http_stub_status_module --with-http_ssl_module --with-cc-opt=-g\ -O0'
+    NGINX_DEFUALT_OPT='--with-debug --with-http_auth_request_module --with-http_stub_status_module --with-http_ssl_module --with-cc-opt=-g\ -O0'
     MAKE=make
     KILLALL=killall
     PS_C="ps -C"
@@ -57,7 +57,9 @@ fi
 echo "NGINX_CONFIG_OPT=$NGINX_CONFIG_OPT"
 echo "NUM_THREADS=$NUM_THREADS"
 
-export NGX_MRUBY_CFLAGS=-DMRB_GC_STRESS
+# FIXME: workaround for https://github.com/matsumotory/ngx_mruby/issues/296
+# export NGX_MRUBY_CFLAGS=-DMRB_GC_STRESS
+export NGX_MRUBY_CFLAGS="-DMRB_GC_STRESS -DHAVE_CONF_GET1_DEFAULT_CONFIG_FILE"
 
 if [ "$ONLY_BUILD_NGX_MRUBY" = "" ]; then
 
