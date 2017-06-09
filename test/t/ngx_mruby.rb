@@ -684,6 +684,18 @@ t.assert('ngx_mruby - Nginx.set_status= alias Nginx.return', 'location /alias_re
   t.assert_equal 204, res["code"]
 end
 
+t.assert('ngx_mruby - allow empty response body issue 200', 'location /issue-200') do
+  res = HttpRequest.new.get base + '/issue-200'
+  t.assert_equal 200, res["code"]
+  t.assert_equal "", res["body"]
+end
+
+t.assert('ngx_mruby - allow empty response body issue 225', 'location /issue-225') do
+  res = HttpRequest.new.get base + '/issue-225'
+  t.assert_equal 200, res["code"]
+  t.assert_equal "", res["body"]
+end
+
 if nginx_features.is_stream_supported?
 
   base1 = "http://127.0.0.1:12345"
