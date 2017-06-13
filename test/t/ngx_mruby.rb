@@ -583,6 +583,24 @@ t.assert('ngx_mruby - backtrace log', 'location /backtrace') do
   t.assert_equal 4, found
 end
 
+t.assert('ngx_mruby - with auth_request', 'location /protected_resource') do
+  body = nil
+  res = HttpRequest.new.get base + '/protected_resource'
+  t.assert_equal 401, res["code"]
+
+  res = HttpRequest.new.get(base + '/protected_resource', body, {"Authorization" => "Bearer hoge"})
+  t.assert_equal 200, res["code"]
+  t.assert_equal "This is a protected resource", res["body"]
+
+  res = HttpRequest.new.get(base + '/protected_resource', body, {"Authorization" => "Bearer blahblahblah"})
+  t.assert_equal 200, res["code"]
+  t.assert_equal "This is a protected resource", res["body"]
+
+  res = HttpRequest.new.get(base + '/protected_resource', body, {"Authorization" => "Bearer boofoowoo"})
+  t.assert_equal 200, res["code"]
+  t.assert_equal "This is a protected resource", res["body"]
+end
+
 if nginx_features.is_stream_supported?
 
   base1 = "http://127.0.0.1:12345"
