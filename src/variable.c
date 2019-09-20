@@ -79,19 +79,19 @@ iv_put(mrb_state *mrb, iv_tbl *t, mrb_sym sym, mrb_value val)
   }
 
   /* Not found */
-  t->size++;
   if (matched_seg) {
     matched_seg->key[matched_idx] = sym;
     matched_seg->val[matched_idx] = val;
+    t->size++;
     return;
   }
 
   seg = (segment*)mrb_malloc(mrb, sizeof(segment));
-  if (!seg) return;
   seg->next = NULL;
   seg->key[0] = sym;
   seg->val[0] = val;
   t->last_len = 1;
+  t->size++;
   if (prev) {
     prev->next = seg;
   }
@@ -341,21 +341,22 @@ mrb_iv_get(mrb_state *mrb, mrb_value obj, mrb_sym sym)
 
 static inline void assign_class_name(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v);
 
-MRB_API void
-mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
+void
+mrb_obj_iv_set_force(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
 {
-  iv_tbl *t;
-
-  if (MRB_FROZEN_P(obj)) {
-    mrb_raisef(mrb, E_FROZEN_ERROR, "can't modify frozen %S", mrb_obj_value(obj));
-  }
   assign_class_name(mrb, obj, sym, v);
   if (!obj->iv) {
     obj->iv = iv_new(mrb);
   }
-  t = obj->iv;
-  iv_put(mrb, t, sym, v);
+  iv_put(mrb, obj->iv, sym, v);
   mrb_write_barrier(mrb, (struct RBasic*)obj);
+}
+
+MRB_API void
+mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
+{
+  mrb_check_frozen(mrb, obj);
+  mrb_obj_iv_set_force(mrb, obj, sym, v);
 }
 
 /* Iterates over the instance variable table. */
@@ -387,10 +388,10 @@ assign_class_name(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
 
         if (mrb_nil_p(o)) {
           if ((struct RClass *)obj == mrb->object_class) {
-            mrb_obj_iv_set(mrb, c, id_classname, mrb_symbol_value(sym));
+            mrb_obj_iv_set_force(mrb, c, id_classname, mrb_symbol_value(sym));
           }
           else {
-            mrb_obj_iv_set(mrb, c, id_outer, mrb_obj_value(obj));
+            mrb_obj_iv_set_force(mrb, c, id_outer, mrb_obj_value(obj));
           }
         }
       }
@@ -445,7 +446,7 @@ MRB_API void
 mrb_iv_name_sym_check(mrb_state *mrb, mrb_sym iv_name)
 {
   if (!mrb_iv_name_sym_p(mrb, iv_name)) {
-    mrb_name_error(mrb, iv_name, "'%S' is not allowed as an instance variable name", mrb_sym2str(mrb, iv_name));
+    mrb_name_error(mrb, iv_name, "'%n' is not allowed as an instance variable name", iv_name);
   }
 }
 
@@ -524,6 +525,7 @@ mrb_iv_remove(mrb_state *mrb, mrb_value obj, mrb_sym sym)
     iv_tbl *t = mrb_obj_ptr(obj)->iv;
     mrb_value val;
 
+    mrb_check_frozen(mrb, mrb_obj_ptr(obj));
     if (iv_del(mrb, t, sym, &val)) {
       return val;
     }
@@ -652,8 +654,7 @@ mrb_mod_cv_get(mrb_state *mrb, struct RClass *c, mrb_sym sym)
       if (given) return v;
     }
   }
-  mrb_name_error(mrb, sym, "uninitialized class variable %S in %S",
-                 mrb_sym2str(mrb, sym), mrb_obj_value(cls));
+  mrb_name_error(mrb, sym, "uninitialized class variable %n in %C", sym, cls);
   /* not reached */
   return mrb_nil_value();
 }
@@ -673,6 +674,7 @@ mrb_mod_cv_set(mrb_state *mrb, struct RClass *c, mrb_sym sym, mrb_value v)
     iv_tbl *t = c->iv;
 
     if (iv_get(mrb, t, sym, NULL)) {
+      mrb_check_frozen(mrb, c);
       iv_put(mrb, t, sym, v);
       mrb_write_barrier(mrb, (struct RBasic*)c);
       return;
@@ -700,6 +702,7 @@ mrb_mod_cv_set(mrb_state *mrb, struct RClass *c, mrb_sym sym, mrb_value v)
     c = cls;
   }
 
+  mrb_check_frozen(mrb, c);
   if (!c->iv) {
     c->iv = iv_new(mrb);
   }
@@ -879,7 +882,15 @@ const_i(mrb_state *mrb, mrb_sym sym, mrb_value v, void *p)
   ary = *(mrb_value*)p;
   s = mrb_sym2name_len(mrb, sym, &len);
   if (len >= 1 && ISUPPER(s[0])) {
-    mrb_ary_push(mrb, ary, mrb_symbol_value(sym));
+    mrb_int i, alen = RARRAY_LEN(ary);
+
+    for (i=0; i<alen; i++) {
+      if (mrb_symbol(RARRAY_PTR(ary)[i]) == sym)
+        break;
+    }
+    if (i==alen) {
+      mrb_ary_push(mrb, ary, mrb_symbol_value(sym));
+    }
   }
   return 0;
 }
@@ -962,16 +973,8 @@ mrb_f_global_variables(mrb_state *mrb, mrb_value self)
 {
   iv_tbl *t = mrb->globals;
   mrb_value ary = mrb_ary_new(mrb);
-  size_t i;
-  char buf[3];
 
   iv_foreach(mrb, t, gv_i, &ary);
-  buf[0] = '$';
-  buf[2] = 0;
-  for (i = 1; i <= 9; ++i) {
-    buf[1] = (char)(i + '0');
-    mrb_ary_push(mrb, ary, mrb_symbol_value(mrb_intern(mrb, buf, 2)));
-  }
   return ary;
 }
 
@@ -1106,6 +1109,7 @@ mrb_class_find_path(mrb_state *mrb, struct RClass *c)
     iv_del(mrb, c->iv, mrb_intern_lit(mrb, "__outer__"), NULL);
     iv_put(mrb, c->iv, mrb_intern_lit(mrb, "__classname__"), path);
     mrb_field_write_barrier_value(mrb, (struct RBasic*)c, path);
+    path = mrb_str_dup(mrb, path);
   }
   return path;
 }
@@ -1115,7 +1119,9 @@ mrb_class_find_path(mrb_state *mrb, struct RClass *c)
 mrb_bool
 mrb_ident_p(const char *s, mrb_int len)
 {
-  for (mrb_int i = 0; i < len; i++) {
+  mrb_int i;
+
+  for (i = 0; i < len; i++) {
     if (!identchar(s[i])) return FALSE;
   }
   return TRUE;
