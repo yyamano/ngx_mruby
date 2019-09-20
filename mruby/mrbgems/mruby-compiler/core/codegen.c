@@ -102,6 +102,7 @@ codegen_error(codegen_scope *s, const char *message)
   while (s->prev) {
     codegen_scope *tmp = s->prev;
     mrb_free(s->mrb, s->iseq);
+    mrb_free(s->mrb, s->lines);
     mrb_pool_close(s->mpool);
     s = tmp;
   }
@@ -272,8 +273,7 @@ genop_W(codegen_scope *s, mrb_code i, uint32_t a)
 #define NOVAL  0
 #define VAL    1
 
-//static
-mrb_bool
+static mrb_bool
 no_optimize(codegen_scope *s)
 {
   if (s && s->parser && s->parser->no_optimize)
@@ -291,7 +291,7 @@ on_eval(codegen_scope *s)
 }
 
 struct mrb_insn_data
-mrb_decode_insn(mrb_code *pc)
+mrb_decode_insn(const mrb_code *pc)
 {
   struct mrb_insn_data data = { 0 };
   mrb_code insn = READ_B();
@@ -956,7 +956,12 @@ gen_values(codegen_scope *s, node *t, int val, int extra)
         }
         else {
           pop_n(n);
-          genop_2(s, OP_ARRAY, cursp(), n);
+          if (n == 0 && is_splat) {
+            genop_1(s, OP_LOADNIL, cursp());
+          }
+          else {
+            genop_2(s, OP_ARRAY, cursp(), n);
+          }
           push();
           codegen(s, t->car, VAL);
           pop(); pop();
@@ -1553,7 +1558,7 @@ codegen(codegen_scope *s, node *tree, int val)
 
   case NODE_IF:
     {
-      int pos1, pos2;
+      int pos1, pos2, nil_p = FALSE;
       node *elsepart = tree->cdr->cdr->car;
 
       if (!tree->car) {
@@ -1570,30 +1575,57 @@ codegen(codegen_scope *s, node *tree, int val)
       case NODE_NIL:
         codegen(s, elsepart, val);
         goto exit;
+      case NODE_CALL:
+        {
+          node *n = tree->car->cdr;
+          mrb_sym mid = nsym(n->cdr->car);
+          mrb_sym mnil = mrb_intern_lit(s->mrb, "nil?");
+          if (mid == mnil && n->cdr->cdr->car == NULL) {
+            nil_p = TRUE;
+            codegen(s, n->car, VAL);
+          }
+        }
+        break;
       }
-      codegen(s, tree->car, VAL);
+      if (!nil_p) {
+        codegen(s, tree->car, VAL);
+      }
       pop();
-      pos1 = genjmp2(s, OP_JMPNOT, cursp(), 0, val);
-
-      codegen(s, tree->cdr->car, val);
-      if (elsepart) {
+      if (val || tree->cdr->car) {
+        if (nil_p) {
+          pos2 = genjmp2(s, OP_JMPNIL, cursp(), 0, val);
+          pos1 = genjmp(s, OP_JMP, 0);
+          dispatch(s, pos2);
+        }
+        else {
+          pos1 = genjmp2(s, OP_JMPNOT, cursp(), 0, val);
+        }
+        codegen(s, tree->cdr->car, val);
         if (val) pop();
-        pos2 = genjmp(s, OP_JMP, 0);
-        dispatch(s, pos1);
-        codegen(s, elsepart, val);
-        dispatch(s, pos2);
-      }
-      else {
-        if (val) {
-          pop();
+        if (elsepart || val) {
           pos2 = genjmp(s, OP_JMP, 0);
           dispatch(s, pos1);
-          genop_1(s, OP_LOADNIL, cursp());
+          codegen(s, elsepart, val);
           dispatch(s, pos2);
-          push();
         }
         else {
           dispatch(s, pos1);
+        }
+      }
+      else {                    /* empty then-part */
+        if (elsepart) {
+          if (nil_p) {
+            pos1 = genjmp2(s, OP_JMPNIL, cursp(), 0, val);
+          }
+          else {
+            pos1 = genjmp2(s, OP_JMPIF, cursp(), 0, val);
+          }
+          codegen(s, elsepart, val);
+          dispatch(s, pos1);
+        }
+        else if (val && !nil_p) {
+          genop_1(s, OP_LOADNIL, cursp());
+          push();
         }
       }
     }
@@ -2373,7 +2405,7 @@ codegen(codegen_scope *s, node *tree, int val)
       mrb_value str;
       int sym;
 
-      str = mrb_format(mrb, "$%S", mrb_fixnum_value(nint(tree)));
+      str = mrb_format(mrb, "$%d", nint(tree));
       sym = new_sym(s, mrb_intern_str(mrb, str));
       genop_2(s, OP_GETGV, cursp(), sym);
       push();
@@ -3020,6 +3052,9 @@ scope_finish(codegen_scope *s)
   mrb_state *mrb = s->mrb;
   mrb_irep *irep = s->irep;
 
+  if (s->nlocals >= 0x3ff) {
+    codegen_error(s, "too many local variables");
+  }
   irep->flags = 0;
   if (s->iseq) {
     irep->iseq = (mrb_code *)codegen_realloc(s, s->iseq, sizeof(mrb_code)*s->pc);
