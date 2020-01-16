@@ -2079,6 +2079,7 @@ static int ngx_http_mruby_set_set_client_ca_cert(ngx_ssl_conn_t *ssl_conn, ngx_s
   ssl_ctx = c->ssl->session_ctx;
 
   if (SSL_CTX_load_verify_locations(ssl_ctx, (char *)cert->data, NULL) == 0) {
+    ngx_ssl_error(NGX_LOG_EMERG, c->log, 0, "SSL_CTX_load_verify_locations(\"%s\") failed", cert->data);
     return NGX_ERROR;
   }
 
@@ -2086,6 +2087,7 @@ static int ngx_http_mruby_set_set_client_ca_cert(ngx_ssl_conn_t *ssl_conn, ngx_s
 
   cert_names = SSL_load_client_CA_file((char *)cert->data);
   if (cert_names == NULL) {
+    ngx_ssl_error(NGX_LOG_EMERG, c->log, 0, "SSL_load_client_CA_file(\"%s\") failed", cert->data);
     return NGX_ERROR;
   }
 
